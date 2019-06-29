@@ -9,13 +9,15 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UnsaturatedTypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Data.Symbol.Parser where
 
 import GHC.TypeLits
 import Data.Symbol.Ascii
 
-import qualified Type.Prelude as Ty
+import Prelude(Maybe(..), Bool(..))
+import Type.Prelude
 import Type.Control.Monad.State
 
 -- PARSER
@@ -28,15 +30,15 @@ type family RunParser (p :: Parser i a) :: State i (Maybe a) where
   RunParser ('MkParser p) = p
   
 type family Fail :: Parser i a where
-  Fail = 'MkParser (Ty.Pure 'Nothing)
+  Fail = 'MkParser (Pure 'Nothing)
 
 -- Instances for Parser
 
-instance Ty.Functor (Parser i) where
-  type Fmap f ('MkParser p) = 'MkParser (Ty.Fmap f Ty.<$> p)
+instance Functor (Parser i) where
+  type Fmap f ('MkParser p) = 'MkParser (Fmap f <$> p)
 
-instance Ty.Applicative (Parser i) where
-  type Pure x = 'MkParser (Ty.Pure (Ty.Pure x))
+instance Applicative (Parser i) where
+  type Pure x = 'MkParser (Pure (Pure x))
 
 type family BindParserImpl2
   (m :: (i, Maybe a))
@@ -52,7 +54,7 @@ type family BindParserImpl
   :: (i, Maybe b) where
   BindParserImpl p k s = BindParserImpl2 (p s) k
 
-instance Ty.Monad (Parser i) where
+instance Monad (Parser i) where
   type 'MkParser p >>= k = 'MkParser ('MkState (BindParserImpl (RunState p) k))
 
 type family AlternativeParserImpl2
@@ -67,7 +69,7 @@ type family AlternativeParserImpl
   (s :: i) where
   AlternativeParserImpl p q s = AlternativeParserImpl2 (p s) (q s)
 
-instance Ty.Alternative (Parser i) where
+instance Alternative (Parser i) where
   type Empty = Fail
   type 'MkParser p <|> 'MkParser q = 'MkParser ('MkState (AlternativeParserImpl (RunState p) (RunState q)))
 
