@@ -1,0 +1,6 @@
+:set -XDataKinds
+:set -XUndecidableInstances
+:set -XTypeOperators
+:set -XTypeFamilies
+:set -XUnsaturatedTypeFamilies
+:set -XNoImplicitPrelude
