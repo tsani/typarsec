@@ -11,7 +11,20 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Data.Symbol.Parser where
+module Data.Symbol.Parser
+  ( Input
+  , Parser(..)
+  , BindParserImpl
+  , BindParserImpl2
+  , RunParser
+  , Fail
+  , Predicate
+  , Satisfy
+  , String
+  , Many
+  , Some
+  , ToList
+  ) where
 
 import GHC.TypeLits
 import Data.Symbol.Ascii
@@ -26,36 +39,43 @@ type Input = [Symbol] -- assumed to be single chars
 
 data Parser i a = MkParser (State i (Maybe a))
 
-type family RunParser (p :: Parser i a) :: State i (Maybe a) where
-  RunParser ('MkParser p) = p
-  
+type family RunParser (p :: Parser i a) (s :: i) :: (i, Maybe a) where
+  RunParser ('MkParser p) s = RunState p s
+
+type family RunParser' (p :: Parser i a) (s :: i) :: Maybe a where
+  RunParser' p s = Snd (RunParser p s)
+
 type family Fail :: Parser i a where
   Fail = 'MkParser (Pure 'Nothing)
 
 -- Instances for Parser
 
-instance Functor (Parser i) where
-  type Fmap f ('MkParser p) = 'MkParser (Fmap f <$> p)
+-- instance Functor (Parser i) where
+--   type Fmap f ('MkParser p) = 'MkParser (Fmap f <$> p)
+
+-- type family MapParser (f :: a ~> b) (p :: Parser a) :: Parser b where
+--   MapParser f ('MkParser p) = 'MkParser (MapMaybe f <$>
 
 instance Applicative (Parser i) where
   type Pure x = 'MkParser (Pure (Pure x))
 
 type family BindParserImpl2
   (m :: (i, Maybe a))
-  (k :: a -> Parser i b)
+  (k :: a ~> Parser i b)
   :: (i, Maybe b) where
+  BindParserImpl2 '(s, 'Just x) k = RunParser (k x) s
   BindParserImpl2 '(s, 'Nothing) k = '(s, 'Nothing)
-  BindParserImpl2 '(s, 'Just x) k = RunState (RunParser (k x)) s
 
 type family BindParserImpl
   (p :: i ~> (i, Maybe a))
-  (k :: a -> Parser i b)
+  (k :: a ~> Parser i b)
   (s :: i)
   :: (i, Maybe b) where
   BindParserImpl p k s = BindParserImpl2 (p s) k
 
 instance Monad (Parser i) where
-  type 'MkParser p >>= k = 'MkParser ('MkState (BindParserImpl (RunState p) k))
+  type 'MkParser ('MkState p) >>= k =
+    'MkParser ('MkState (BindParserImpl p k))
 
 type family AlternativeParserImpl2
   (p :: (i, Maybe a))
@@ -89,9 +109,16 @@ type family SatisfyImpl (f :: Predicate Symbol) (s :: Input)
 type family Satisfy (f :: Predicate Symbol) :: Parser Input Symbol where
   Satisfy f = 'MkParser ('MkState (SatisfyImpl f))
 
--- type family StringImpl (s :: [Symbol]) :: Parser Input Symbol where
---   StringImpl
--- 
--- type family String (s :: Symbol) :: Parser Input Symbol where
---   String s = StringImpl (ToList s)
+type family StringImpl (s :: [Symbol]) :: Parser Input [Symbol] where
+  StringImpl '[] = Pure '[]
+  StringImpl (c ': cs) = Fmap Apply (Apply (:) <$> Satisfy ((==) c)) <*> StringImpl cs
+
+type family String (s :: Symbol) :: Parser Input [Symbol] where
+  String s = StringImpl (ToList s)
+
+type family Many (p :: Parser i a) :: Parser i [a] where
+  Many p = Some p <|> Pure '[]
+  
+type family Some (p :: Parser i a) :: Parser i [a] where
+  Some p = Apply <$> (Apply (:) <$> p) <*> Many p
   
